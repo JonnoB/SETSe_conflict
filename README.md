@@ -1,4 +1,4 @@
-#Highly Sprung: understanding conflict in networks
+# Highly Sprung: understanding conflict in networks
 
 This is the repo for the work used to understand whether SETSe can be used to analyse conlficts and thier outcomes on social networks with different relationship types.
 
