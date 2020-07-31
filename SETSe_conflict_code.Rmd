@@ -43,6 +43,46 @@ list.files("/home/jonno/Useful_PhD__R_Functions", pattern = ".R", full.names = T
 
 ```
 
+#Plot peels
+```{r}
+set.seed(123)
+quintet_g_list<- LETTERS[1:5] %>% map(~{
+      nodes <- 0
+      while(nodes !=40){
+        g <- generate_peels_network(type = .x ) %>%
+          remove_small_components()
+        nodes <- vcount(g)
+      }
+return(g)
+})
+
+set.seed(123)
+plot_list <- 1:5 %>%
+  map(~{
+    out <- ggraph(quintet_g_list[[.x]]) +
+      geom_edge_fan()+
+      geom_node_point(aes(colour = sub_class), size=3) +
+      labs(title = paste("Type", LETTERS[.x]))
+    
+    if(.x !=5){
+       print(.x)
+      out <- out + guides(colour = "none") 
+    }
+    
+    return(out)
+    
+    })
+
+
+ (plot_list[[1]] | plot_list[[2]] | plot_list[[3]] )/
+     (plot_list[[4]]| plot_list[[5]]) +
+   plot_annotation(
+  title = "The Peels quintet of assortativty identical graphs, coloured by subgraph-type",
+#  subtitle = 'The graphs can be separated using SETSe'
+)
+
+```
+
  
 #simple case
 
@@ -69,157 +109,7 @@ If I generate 100 examples of each combination of agreement for all graph types,
 I can then change the edge weights and repeat. this will show the importance of edge weights in the result.
 
 ```{r}
-
-#What I want to know.
-#fraction of total nodes? aka did they win?
-#How many times?
-#What about centrality?
-#what about communitys
-
-peels_class_k <- function(g, k_levels = c(1000, 500, 100)){
-  
-  g_df_vertices <- as_data_frame(g, what = "vertices")
-  
-  g_df_edges <- as_data_frame(g, what = "edges") %>%
-    left_join(g_df_vertices, by = c("from"="name")) %>%
-    left_join(g_df_vertices, by = c("to"="name")) %>%
-    mutate(class_match = class.x == class.y,
-           sub_class_match = sub_class.x == sub_class.y,
-           k = case_when(
-             class_match & sub_class_match ~ k_levels[1], #sub class match
-             class_match & !sub_class_match ~ k_levels[2], #class amtch
-             TRUE ~k_levels[3] #no match
-             
-           )) %>%
-    {.[,c(1,2,9)]}
-  
-  g <- graph_from_data_frame(g_df_edges, directed = FALSE, vertices = g_df_vertices)
-  
-  return(g)
-  
-}
-
-#first node is always positive
-two_beligerent_conflict <- function(g, beligerents){
-  
-  force_vect <- rep(0, vcount(g))
-  
-  force_vect[beligerents] <- c(1,-1)
-  
-  g <- set.vertex.attribute(g, "force", value = force_vect)
-  
-  return(g)
-  
-}
-
-
-two_beligerent_conflict <- function(g, beligerents){
-  
-  force_vect <- rep(0, vcount(g))
-  
-  force_vect[beligerents] <- c(1,-1)
-  
-  v_df <- as_data_frame(g, what = "vertices") %>%
-    mutate(force = case_when(
-      name == beligerents[1] ~1,
-      name == beligerents[2] ~-1,
-      TRUE ~0
-      
-    ))
-  
-  e_df <- as_data_frame(g, what = "edges")
-  
-  g <- graph_from_data_frame(e_df, directed = FALSE, vertices = v_df)
-  
-  return(g)
-  
-}
-
-
-
-g <- generate_peels_network(type = "A") %>%
-  remove_small_components() %>%
-  peels_class_k(., k_levels = c(1000, 500, 100)) %>%
-  prepare_SETSe_binary(
-    node_names = "name",
-    force_var = "class",
-    positive_value = "A") 
-
-
-#which nodes to compare against
-
-
-#The first node of a_1 vs a_1 generally loses on type C why? It should be equal
-#It doesn't matter if you reverse the nodes being choses
-peels_results <- peel_conflicts(graph_types = LETTERS[1:5],
-  beligerents =  tibble(node1 = c(1, 1,1,1, 11,11,11,21,21,31), 
-                        node2 = c(2,11,21,31, 12,21,31,22,31,32)), #nodes to test
-   k_levels = c(100,550,1000),
-  samples = 100)
-
-
-peels_results2 <- peel_conflicts(graph_types = LETTERS[1:5],
-  beligerents =  tibble(node1 = c(1, 1,1,1, 11,11,11,21,21,31), 
-                        node2 = c(2,11,21,31, 12,21,31,22,31,32)), #nodes to test
-  k_levels = c(100,100,100),
-  samples = 100)
-
-
-peels_results3 <- peel_conflicts(graph_types = LETTERS[1:5],
-  beligerents =  tibble(node1 = c(1, 1,1,1, 11,11,11,21,21,31), 
-                        node2 = c(2,11,21,31, 12,21,31,22,31,32)), #nodes to test
-  k_levels = c(100,5050,10000),
-  samples = 100)
-
-
-
-peels_results %>%
-  ggplot(aes(x = clustering_elev_fract, y = betweenness_ratio)) + geom_point()
-
-
-peels_results3 %>%
-  ggplot(aes(x = paste(sub_class, sub_class2), y = clustering_elev_fract)) + geom_boxplot()+
-  facet_wrap(~graph_type) + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
-
-
-test <- peels_results %>%
-  group_by(graph_type, sub_class, sub_class2) %>%
-  summarise_all(mean)
-
-
-
-test <- peel_conflicts(graph_type = "E",
-  beligerents =  tibble(node1 = c(1, 4), 
-                        node2 = c(2, 34)), #nodes to test
-   k_levels = c(100,550,1000),
-  samples = 5)
-
-peels_results3 %>%
-  bind_rows(peels_results %>%
-  rename(sub_class3 = sub_class, 
-         sub_class = sub_class2) %>%
-  rename(sub_class2 = sub_class3) %>%
-    mutate(clustering_elev_fract = 1-clustering_elev_fract)) %>%
-  ggplot(aes(x = sub_class, y = sub_class2, fill = clustering_elev_fract)) + geom_raster() +
-  scale_fill_viridis_c()+
-  facet_wrap(~graph_type)
-
-
-saveRDS(test, file.path(PLwd, "peel_conflict.rds")  )
-
-
-test <-bind_rows(peels_results %>% mutate(type = "10x"),
-          peels_results2 %>% mutate(type = "1x"),
-          peels_results3 %>% mutate(type = "100x"))
-
-test %>%
-  filter(graph_type != "A") %>%
-  filter(sub_class != sub_class2) %>% #against self just isn't interesting 
-  ggplot(aes(x = paste(sub_class, sub_class2), y = clustering_elev_fract, fill = type)) + geom_boxplot()+
-  facet_wrap(~graph_type) + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+
-  scale_fill_brewer(type = "qual")
-
-
+job_id <- 3
 
 
 
@@ -232,10 +122,6 @@ peels_results <- peel_conflicts(graph_type = "C",
   k_levels = c(100,550,1000),
   samples = 1)
 
-
-peels_results %>%
-  ggplot(aes(x = node1, y = node2, fill = clustering_elev_fract>0.5)) + geom_raster()
-
 peels_results_uniform <- peel_conflicts(graph_type = "C",
   beligerents = tibble(node1 = combinations[,1], 
                        node2 = combinations[,2]), #nodes to test
@@ -243,15 +129,20 @@ peels_results_uniform <- peel_conflicts(graph_type = "C",
   samples = 1)
 
 
+peels_results %>%
+  ggplot(aes(x = node1, y = node2, fill = clustering_elev_fract>0.5)) + geom_raster()
+
+
+
 performance_change <- peel_conflict_performance(peels_results, peels_results_uniform)
 
 performance_change %>%
-  ggplot(aes(x = rank, y = rank_uniform))+ geom_point()
+  ggplot(aes(x = rank, y = rank_uniform)) + geom_point()
 
 
 performance_change %>%
   arrange(rank_change) %>%
-  ggplot(aes(x = 1:40, y = rank_change))+ geom_point()
+  ggplot(aes(x = 1:40, y = rank_change)) + geom_point()
 
 ```
 comparing the conflict of everynode to every other node allows us to find nodes that are better positioned for that network setup. either purely topologically or accounting for edge strength
