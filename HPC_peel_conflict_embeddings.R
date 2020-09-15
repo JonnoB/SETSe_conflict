@@ -40,11 +40,11 @@ if(dir.exists("/home/jonno")){
   basewd <- "/home/ucabbou"
   #on the home dir not in the project folder like when it is done on my own comp
   save_data_files_path <- file.path(project_folder) #save the files
-
+  
   #If it is not on my computer then the variables need to be loaded from the system environment
   #Get the task ID
   task_id <- as.integer(Sys.getenv("SGE_TASK_ID"))
-
+  
   list.files(file.path(basewd, "Useful_PhD__R_Functions"), pattern = ".R", full.names = T) %>%
     walk(~source(.x))
   
@@ -55,13 +55,18 @@ if(dir.exists("/home/jonno")){
 
 #get the total job set
 #only the row corresponding to the rask ID will be performed
-simulation_combinations <- expand.grid(LETTERS[1:5], c("k_uniform", "k_varies"), stringsAsFactors = FALSE)
+print("generate simulations")
+simulation_combinations <- expand.grid(LETTERS[1:5], c("k_uniform", "k_varies"), 1:50, stringsAsFactors = FALSE)
 
-k_type <- simulation_combinations[job_id , 2]
+print("get simulation parameters")
 
-graph_type <- simulation_combinations[job_id,1]
+graph_type <- simulation_combinations[task_id,1]
 
-file_name <- paste0("peel_conflict_", k_type, "_graph_",graph_type, ".rds" )
+k_type <- simulation_combinations[task_id , 2]
+
+seed <- simulation_combinations[task_id,3]
+
+file_name <- paste0("peel_conflict_", k_type, "_graph_",graph_type, "_seed_",seed, ".rds" )
 
 if(k_type =="k_uniform"){
   
@@ -73,13 +78,21 @@ if(k_type =="k_uniform"){
 }
 
 #THIS SHOULD BE SET TO 40!!!!!!
+print("begin embeddings")
+start_time <- Sys.time()
+
 combinations <- t(combn(1:3, 2))
 
+#The functiom ensures that the network has only a single component
 peels_results <- peel_conflicts(graph_type = graph_type,
                                 beligerents = tibble(node1 = combinations[,1], 
                                                      node2 = combinations[,2]), #nodes to test
                                 k_levels = k_levels,
-                                samples = 1) #SAMPLES SHOULD NOT BE 1!!!!
+                                seed = seed)
 
-  
-  saveRDS(peels_results, file = file_name )
+
+stop_time <- Sys.time()
+
+print(paste0("time taken for embeddings ", round(difftime(stop_time, start_time, units = "mins"), 2), " minutes"))
+
+saveRDS(peels_results, file = file_name )
