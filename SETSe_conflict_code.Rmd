@@ -7,6 +7,23 @@ editor_options:
   chunk_output_type: console
 ---
 
+r.peach13@imperial.ac.uk 
+
+https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.1.033211 
+
+A network science approach towards studying protein folding
+
+Measuring and mitigating behavioural segregation using Call Data Records -P
+Community detection with node attributes in multilayer networks ( -p
+
+poster sesson 7
+Stochastic dimensional reduction on large biological neural networks -p
+Enhancing transport properties in interconnected systems without altering their structure  -p
+Revealing Organizational Structures by Studying Activity Patterns in Social Networks -p
+
+poster session 10
+Brain communication is shaped by cortical hierarchies -p
+
 The goal of this code is to test whether SETSe can integrate both the strength of relationships between people, the greater social network and the individual belligerents to predict the outcome of a conflict, or alternatively ascertain the strength of different relationship types from known outcomes.
 
 #concept
@@ -22,7 +39,7 @@ This paper explores how the strenght of a connection between individuals affects
 #Set up
 ```{r Setup}
 
-packages <- c("tidyverse", "igraph","readr","readxl", "broom", "stringr", "xtable", "rlang", "latex2exp", "yardstick", "minpack.lm", "ggraph", "patchwork", "rsample", "VGAM", "class", "mclust", "R.matlab", "ranger")
+packages <- c("tidyverse", "igraph","readr","readxl", "broom", "stringr", "xtable", "rlang", "latex2exp", "yardstick", "ggraph", "patchwork", "rsample", "VGAM", "class", "mclust", "R.matlab", "ranger")
 
 new.packages <- packages[!(packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
@@ -32,22 +49,29 @@ arrange <- dplyr::arrange
 map <- purrr::map
 sapply(packages, library, character.only = TRUE)
 
-library(rSETSe)
-
+library(rsetse)
+library(ConflictInternal)
 #Set up file system to read the correct folders this switches between aws and windows mode
 
-#basewd <- "/home/jonno/Dropbox/Jonathan_Bourne_Phd_Folder"
-LatexFolder <- "/home/jonno/Dropbox/Apps/ShareLaTeX/Sets Paper 1" 
+#set this to your root
+basewd <- "/home/jonno"
+
+conflict_folder <- file.path(basewd, "SETSe_conflict")
+
+#all the other folders can go from there
+LatexFolder <- file.path(basewd,"Dropbox/Apps/ShareLaTeX/Sets Paper 3" )
 FiguresFolder <- file.path(LatexFolder, "Figures")
 TablesFolder <- file.path(LatexFolder, "Tables")
 MatricesFolder <- file.path(LatexFolder, "Matrices")
-PLwd <- "/home/jonno/setse_1_data"
-CodeFolder <- "/home/jonno/SETSe_assortativity_and_clusters"
+PLwd <- file.path(basewd,"/setse_1_data")
+CodeFolder <- file.path(basewd,"SETSe_assortativity_and_clusters")
 SubcodeFolder <- file.path(CodeFolder, "sub_code")
 
-#Load some other useful functions
-list.files("/home/jonno/Useful_PhD__R_Functions", pattern = ".R", full.names = T) %>%
-  walk(~source(.x))
+
+#block this off to see what is being used from there
+# #Load some other useful functions
+# list.files("/home/jonno/Useful_PhD__R_Functions", pattern = ".R", full.names = T) %>%
+#   walk(~source(.x))
 
 
 ```
@@ -118,142 +142,8 @@ If I generate 100 examples of each combination of agreement for all graph types,
 
 I can then change the edge weights and repeat. this will show the importance of edge weights in the result.
 
-
-THIS BLOCK IS NOT USEFUL ALL CALC ARE DONE ON THE HPC
-
-```{r}
-
-#every combination of node
-combinations <- t(combn(1:40, 2))
-
-peel_results_all <- LETTERS[1:5] %>%
-  map_df(~{
-    start_time <- Sys.time()
-    peels_results <- peel_conflicts(graph_type = .x,
-                                    beligerents = tibble(node1 = combinations[,1], 
-                                                         node2 = combinations[,2]), #nodes to test
-                                    k_levels = c(100,550,1000),
-                                    seed = 432)
-    
-    stop_time <- Sys.time()
-    
-    print(paste0("time taken for embeddings ", round(difftime(stop_time, start_time, units = "mins"), 2), " minutes"))
-    return(peels_results)
-    
-  })
-
-
-
-peel_results_uniform_all <- LETTERS[1:5] %>%
-  map_df(~{
-    start_time <- Sys.time()
-    peels_results <- peel_conflicts(graph_type = .x,
-                                    beligerents = tibble(node1 = combinations[,1], 
-                                                         node2 = combinations[,2]), #nodes to test
-                                    k_levels = c(100,100,100),
-                                    seed = 432)
-    
-    stop_time <- Sys.time()
-    
-    print(paste0("time taken for embeddings ", round(difftime(stop_time, start_time, units = "mins"), 2), " minutes"))
-    return(peels_results)
-    
-  })
-
-
-
-peels_results_uniform <- peel_conflicts(graph_type = "C",
-  beligerents = tibble(node1 =1,#combinations[,1], 
-                       node2 =13),# combinations[,2]), #nodes to test
-  k_levels = c(100,550,1000),
-  seed = 1)
-
-
-test <- peel_results_all %>%
-  bind_rows(., peel_results_all %>%
-              rename(sub_class3 = sub_class,
-                     sub_class = sub_class2) %>%
-              rename(sub_class2 = sub_class3)%>%
-              rename(node3 = node1,
-                     node1 = node2) %>%
-              rename(node2 = node3)%>%
-              mutate(across(contains("fract"), ~1-.x))
-            ) 
-
-
-
-test %>%
-  ggplot(aes(x = node1, y = node2, fill = clustering_elev_fract>0.5)) + geom_raster() +
-  facet_wrap(~graph_type)
-
-
-
-test2 <- test %>%
-  group_by(sub_class, sub_class2, graph_type) %>%
-  summarise(win = mean(clustering_elev_fract>0.5),
-            loss = mean(clustering_elev_fract<0.5),
-            draw = mean(clustering_elev_fract==0.5))
-
-test2 %>%
-  ggplot(aes(x = sub_class2, y = sub_class, fill = loss)) + geom_raster()+
-  facet_wrap(~graph_type) +
-  scale_fill_viridis()
-
-
-test_performance <- LETTERS[1:5] %>% map_df(~{
-performance_change <- peel_conflict_performance(peel_results_all %>%
-                                                  filter(graph_type ==.x), 
-                                                peel_results_uniform_all %>%
-                                                  filter(graph_type ==.x)) %>%
-  mutate(graph_type = .x)
-return(performance_change)
-
-})
-
-
-sub_class_performance <- LETTERS[1:5] %>% map_df(~{
-performance_change <- peel_conflict_subclass_performance(peel_results_all %>%
-                                                  filter(graph_type ==.x), 
-                                                peel_results_uniform_all %>%
-                                                  filter(graph_type ==.x)) %>%
-  mutate(graph_type = .x)
-return(performance_change)
-
-})
-
-
-test_performance %>%
-  ggplot(aes(x = , y = rank_uniform)) + geom_point() +
-  facet_wrap(~graph_type)
-
-
-sub_class_performance %>%
-  filter(graph_type!= "E") %>%
-  ggplot(aes(x = sub_class, y = sub_class2, fill = rank_change)) + geom_raster() +
-  facet_wrap(~graph_type) +
-  scale_fill_viridis()
-
-
-
-LETTERS[1:5] %>% map(~{
-test <- sub_class_performance %>%
-  filter(graph_type==.x)
-
-t.test(test$draw_diff, alternative = "two.sided")
-})
-
-
-test_performance %>%
-  arrange(rank_change) %>%
-  group_by(graph_type) %>%
-  mutate(id = 1:40) %>%
-  ungroup %>%
-  ggplot(aes(x = id, y = rank_change, colour = graph_type)) + geom_point()
-
-```
-
 #fixed/variable outcome comparison
-
+Data is loaded from HPC script
 ```{r}
 
 peel_files <- list.files("/home/jonno/conflict_data/peelconflict", full.names = T, pattern = ".rds")
@@ -293,9 +183,9 @@ paired_results <- LETTERS[1:5] %>% map_df(~{
 #This finds out how the ranking of individual nodes changes when they have uniform or variable edge strengths on the same network.
 node_performance <-  LETTERS[1:5] %>% map_df(~{
   peel_files <- peel_files[which(grepl(pattern = .x, x = peel_files))]
-  
+
   paired_results_TRUE <- paired_results %>%
-  filter(is_pair ==T,
+  filter(#is_pair ==T,
          graph_type==.x)
   
   graph_type <- .x
@@ -311,6 +201,7 @@ node_performance <-  LETTERS[1:5] %>% map_df(~{
     })
 
 
+#Networks with kess clear structure have larger changes in node performance when edge strength is changed
 node_performance  %>%
   mutate(
     win_fract = wins/(wins+loss),
@@ -321,160 +212,130 @@ node_performance  %>%
   facet_wrap(~graph_type)
 
 
-#This compares the performance of sub-classes of nodes. really this is more interesting than the other one
-sub_class_performance <-  LETTERS[1:5] %>% map_df(~{
-  peel_files <- peel_files[which(grepl(pattern = .x, x = peel_files))]
+#second version that should be simpler
+peels_results <- read_rds(peel_files[1])
+sub_class_performance <-  peel_files %>% map_df(~{
+  #print every 100 to show progress
+  if(( grep(.x, peel_files)) %%100 == 0) {print(grep(.x, peel_files))}
+  file_name <- .x %>%
+    str_remove(., ".rds") %>%
+    str_split(, pattern = "_", simplify = TRUE)
   
-  paired_results_TRUE <- paired_results %>%
-    filter(is_pair ==T,
-           graph_type==.x)
+  temp <- read_rds(.x)  %>%
+    bind_rows(read_rds(.x) %>%
+                rename(sub_class3 = sub_class, 
+                       sub_class = sub_class2,
+                       node3 = node1,
+                       node1 = node2) %>%
+                rename(sub_class2 = sub_class3,
+                       node2 = node3) %>%
+                mutate(across(contains("fract"), ~1-.x),
+                       betweenness_ratio = 1/betweenness_ratio)) %>%
+    group_by(sub_class, sub_class2, graph_type, sample) %>%
+    summarise(wins = sum(clustering_elev_fract>0.5),
+              draws = sum(clustering_elev_fract==0.5),
+              loss = sum(clustering_elev_fract<0.5), .groups = "drop")%>%
+    mutate(k_type = file_name[[5]],
+           seed = as.integer(file_name[9]))
   
-  graph_type <- .x
-  
-  #    print(.x)
-  paired_results_TRUE$seed %>% map_df(~{
-    peel_files2 <- peel_files[which(grepl(pattern = paste0("seed_", .x, ".rds"), x = peel_files))]
-    
-    peel_conflict_subclass_performance(read_rds(peel_files2[2]), read_rds(peel_files2[1])) %>%
-      mutate(graph_type =  graph_type)
-    
-  })
-})
-
-sub_class_performance <- sub_class_performance %>%
+}) %>%
   mutate(
+    name =  paste(sub_class, sub_class2) %>% str_remove_all(., "_"),
     win_fract = wins/(wins+loss),
-    win_fract_uniform = wins_uniform/(wins_uniform+loss_uniform),
-    win_fract_relative = win_fract -win_fract_uniform,
-    relative_wins = (wins/loss)/(wins_uniform/loss_uniform))
+    k_type = str_remove(k_type, "n")) %>%
+  separate(col = k_type, sep = "[a-z]", into = c("near", "medium", "far"), convert = T, remove = F)
+
+#the above code chunk removes the need for the function
+#    peel_conflict_subclass_performance
 
 sub_class_performance  %>%
-  ggplot(aes(x = win_fract, y = win_fract_uniform)) + geom_hex()+
+  filter(k_type == "1000m550f100" | k_type == "100m550f1000") %>%
+  select(-c(wins, draws, loss, near, medium, far)) %>%
+  pivot_wider(names_from = k_type, values_from = win_fract) %>%
+  ggplot(aes(x = `1000m550f100`, y = `100m550f1000`)) + geom_hex()+
   facet_wrap(~graph_type)
 
-test <- sub_class_performance %>%
-  group_by(sub_class, sub_class2, graph_type) %>%
+sub_graph_pairs <- sub_class_performance %>%
+  group_by(sub_class, sub_class2, graph_type, k_type) %>%
   summarise_all(mean) %>%
   mutate(beligerents = paste(sub_class, sub_class2) %>% str_remove_all(., "_"))
 
 
-test %>%
- # filter(graph_type!= "E") %>%
-  ggplot(aes(x = sub_class, y = sub_class2, fill =  win_fract_uniform  )) + 
+#Clear strategic advantages are visible between network regions
+sub_graph_pairs %>%
+  filter(k_type == "n1000m550f100" ) %>%
+  ggplot(aes(x = sub_class, y = sub_class2, fill =  win_fract  )) + 
   geom_raster() +
   facet_wrap(~graph_type) +
   scale_fill_viridis(option = "C")
 
 
 #keeps only one side of the competition. Usefull for keeping the figures simple and not repeating information
-keep_ids <- combn(unique(test$sub_class),2) %>% t %>% as_tibble %>%
+keep_ids <- combn(unique(sub_graph_pairs$sub_class),2) %>% t %>% as_tibble %>%
   setNames(., c("sub_class", "sub_class2")) %>%
   mutate(names = paste(sub_class, sub_class2) %>% str_remove_all(., "_"))
 
-test %>%
-  filter(graph_type!="A") %>%
+sub_graph_pairs %>%
+  filter(graph_type!="A",
+         k_type =="n1000m550f100") %>%
     filter(beligerents %in% keep_ids$names) %>%
-  ggplot(aes(x = draws_uniform/100, y = win_fract_uniform, colour = beligerents)) + 
+  ggplot(aes(x = draws/100, y = win_fract, colour = beligerents)) + 
    facet_wrap(~graph_type) +
     geom_point() +
   coord_cartesian(xlim = c(0,0.6))
 
+sub_class_performance <- sub_class_performance %>%
+  mutate(k_type = str_remove(k_type, "n")) %>%
+  separate(col = k_type, sep = "[a-z]", into = c("near", "medium", "far"), convert = T, remove = F) %>%
+  mutate(ratio = near/far,
+         ratio_chr = factor(paste(near/100, far/100, sep = "/")),
+         ratio_chr = fct_reorder(ratio_chr, ratio))
 
 
-#With uniform edge loading the pure topological value is shown.
-#Dominant sub-classes win becuase of thier position in the network.
-#This dominance is strongly related to the relative centrality of the nodes
+
+#This plot shows that there are dominant strategic positions in the network defined by connection type.
+#These positions are strongly corellated with centrality
+#Varying the edge connection strength can cause significant change in outcome although in these networks the dominance of the sub-class is not reversed.
+#However within specific networks, the changes within individual networks can have a change in win ratio between the sections of almost 50% percentage points completely reversing the win ratio between two sub_classes
+#For some networks non-uniform edges can produce more stable/unstable results although the mean is unchanged.
+
+#One qeustion is which combinations deviate most from the centrality dominance position and why?
+#Also what is the ability of tradtional clustering to make the same separation?
 sub_class_performance %>%
-    filter(graph_type!="A") %>%
-    mutate(name =  paste(sub_class, sub_class2) %>% str_remove_all(., "_")) %>%
+    filter(graph_type!="A",
+           near == 1000|medium==100|far ==1000) %>%
+  #mutate(k_type = factor(k_type, levels = c("low", "uniform", "high"))) %>%
 # filter(graph_type !="E") %>%
   filter(name %in% keep_ids$names) %>%
+ # select(name, win_fract, graph_type) %>%
+ # pivot_longer(cols = c(win_fract), names_to = "type") %>%
+  #mutate(type = ifelse(type =="win_fract", "varies", "uniform")) %>%
   ggplot(aes(x = name,
-             y = win_fract_uniform, #draw_diff, 
-             fill =name)) + geom_boxplot( show.legend = FALSE) +
-  facet_wrap(~graph_type.x) + 
+             y = win_fract, #draw_diff, 
+             fill =k_type)) + geom_boxplot() +
+  facet_wrap(~graph_type) + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "Win probability for each sub-graph pair on networks of uniform edge strength",
+  labs(title = "Win probability for each sub-graph pair on networks",
        x = "The sub-classes of the two beligerents",
        y = "Win fraction of the first beligerent")
 ggsave(file.path(FiguresFolder, "wins_to_losses.pdf"))
-#One qeustion is which combinations deviate most from the centrality dominance position and why?
-#Also what is the ability of tradtional clustering to make the same separation?
 
 
-#This plot shows how changing the edge strengths changes the win probability
-#for some graphs notably D and E the outcome can become much more unstable although stay the same on average.
-#The changes within individual networks can have a change in win ratio between the sections of almost 50% percentage points completely reversing the win ratio between two sub_classes
+
 sub_class_performance %>%
-      filter(graph_type!="A") %>%
- mutate(name =  paste(sub_class, sub_class2) %>% str_remove_all(., "_")) %>%
-    filter(name %in% keep_ids$names) %>%
-# filter(graph_type !="E") %>%
-  filter(#name %in% keep_ids$names
-    sub_class != sub_class2
-    ) %>%
-  ggplot(aes(x = name,
-             y = win_fract_relative, #draw_diff, 
-             fill =name)) + geom_boxplot( show.legend = FALSE) +
-  facet_wrap(~graph_type.x) + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "Change in win fraction when k is variable relative to when k is uniform",
-       x = "The sub-classes of the two beligerents",
-       y = "Win fraction of the first beligerent")
-
-
-#The ANOVA confirms that certain blocks have a significant change to thier probability
-#of winning the conflict if the their relationship to other nodes is taken into account.
-#This is however, dependent on the underlying relationship structure of the network.
-
-#The fully random network has no difference
-anova_df <- LETTERS[1:5]%>%
-  map_df(~{
-    
-    mod_base <-sub_class_performance %>%
-      filter(sub_class!=sub_class2) %>%
-      filter(graph_type.x == .x) %>%
-      mutate(group = paste(sub_class, sub_class2))
-    
-    anova(lm(win_diff ~ group, data = mod_base)) %>% tidy %>%
-      mutate(graph_type =.x)
-    
-    
-  })
-
-
-anova_list <- LETTERS[1:5] %>%
-  map(~{
-    
-    mod_base <-sub_class_performance %>%
-      filter(sub_class!=sub_class2) %>%
-      filter(graph_type.x == .x) %>%
-      mutate(group = paste(sub_class, sub_class2))
-    
-    aov(win_diff ~ group, data = mod_base) 
-    
-    
-  })
-
-names(anova_list) <- LETTERS[1:4]
-
-anova_df <- LETTERS[1:5] %>%
-  map_df(~{
-    
-  anova_list[[.x]]  %>%  tidy %>%
-      mutate(graph_type =.x)
-  })
-
-#The test appears to be showing which outcome pair is significantly different from another.
-#I done't think this has worked very well.
-test <- LETTERS[1:4] %>% map_df(~{TukeyHSD(anova_list[[.x]])$group  %>% 
-    as_tibble(., rownames= "pair") %>%
-    mutate(graph_type = .x)})
-
+  group_by(ratio_chr, ratio, graph_type, name ) %>%
+  summarise(win_fract = mean(win_fract)) %>%
+    filter(#graph_type!="A",
+           name %in% keep_ids$names) %>%
+  ggplot(aes(colour = name,
+             y = win_fract, #draw_diff, 
+             x =ratio_chr,
+             group = name)) + geom_line() +
+  facet_wrap(~graph_type)
 
 ```
 
-#Centrality
+##Centrality
 
 This block compares the relative centrality of the nodes to the probability of winning. Being more central is an advantage but does not generally determine the winner. 
 
@@ -532,9 +393,9 @@ table(node_performance$winner_greater_betweenness, node_performance$graph_type)
 
 
 #Betweeness and SETSe only agree 58% of the time,or 64% if A is excluded . This is because SETSe using information provided from across the network not just the direct paths.
-#There is very litt change in performance of betweeness between the variable an fixed edge strengths
+#There is very little change in performance of betweeness between the variable an fixed edge strengths
 
-c("uniform", "varies") %>%
+unique(node_performance$k_type) %>%
   map_df(~{
     node_performance %>%
            filter(k_type ==.x) %>%
@@ -543,7 +404,7 @@ c("uniform", "varies") %>%
     
   })
 
-c("uniform", "varies") %>%
+unique(node_performance$k_type) %>%
   map_df(~{
     node_performance %>%
            filter(k_type ==.x,
@@ -555,8 +416,14 @@ c("uniform", "varies") %>%
 
 
 
-
-sub_class_graph_combos <- expand_grid(k_type = c("uniform", "varies"), 
+# sub_class_graph_combos <- expand_grid(k_type = unique(node_performance$k_type), 
+#             paired_results %>% #filter(is_pair) %>% 
+#               select(seed, graph_type),
+#             distinct(node_performance %>% select(sub_class, sub_class2))) %>%
+#   mutate(id = 1:n())
+#takes a long time. save results and load again
+sub_class_graph_combos <- expand_grid(k_type = unique(node_performance$k_type), 
+            seed = 1:100,
             graph_type = LETTERS[1:5],
             distinct(node_performance %>% select(sub_class, sub_class2))) %>%
   mutate(id = 1:n())
@@ -571,14 +438,16 @@ sub_class_betweeness_accuracy <- 1:nrow(sub_class_graph_combos) %>%
       filter(k_type ==temp$k_type,
              graph_type == temp$graph_type,
              sub_class == temp$sub_class,
-             sub_class2 == temp$sub_class2) %>%
+             sub_class2 == temp$sub_class2,
+             seed == temp$seed) %>%
       accuracy(., estimate = factor(betweeness_win, levels = c("draw", "loss", "win")), 
                truth = factor(status, levels = c("draw", "loss", "win"))) %>%
       mutate(id = .x,
              k_type =temp$k_type,
              graph_type = temp$graph_type,
              sub_class = temp$sub_class,
-             sub_class2 = temp$sub_class2)
+             sub_class2 = temp$sub_class2,
+             seed = temp$seed)
     })  %>%
  mutate(name =  paste(sub_class, sub_class2) %>% str_remove_all(., "_")) %>%
     filter(name %in% keep_ids$names)
@@ -587,13 +456,18 @@ sub_class_betweeness_accuracy <- 1:nrow(sub_class_graph_combos) %>%
 #Graph type A is very hard as it is an ER graph the 
 #In addition when the edge strength varies there can be substantial changes in the predictive power of the betweeness.
 #This shows that depending on the network topology and the weighting of the edges the betweeness cannot be thought of as a reliable predictor of win outcome
+
+#This is the mean relative performance averaged across each network
 sub_class_betweeness_accuracy %>%
+    mutate(k_type = factor(k_type, levels = c("low", "uniform","high"))) %>%
+  filter(graph_type!="A") %>%
+    filter(name %in% keep_ids$names) %>%
   ggplot(aes(x = name, y= .estimate, fill = k_type)) + 
   facet_wrap(~graph_type) +
-  geom_col(position = "dodge")+
+  geom_boxplot(position = "dodge") +
   labs(title = "Betweeness as a predictor of winning the competition",
        x = "The sub-classes of the two beligerents",
-       y = "Win fraction of the first beligerent",
+       y = "probability of highest betweeness node winning competition",
        fill = "k type")
 
 
@@ -602,6 +476,44 @@ sub_class_betweeness_accuracy %>%
 node_performance %>%
   select(contains("success")) %>%
   summarise_all(mean)
+
+
+tibble(r =  seq(-1000,1000, 200 ),
+       k_far = ifelse(r<0, abs(r), 100),
+       k_mid = ifelse(r==0, 100, (abs(r)-100)/2 +100),
+       k_near = ifelse(r>0, abs(r), 100))
+
+
+
+
+
+
+#This chunk extracts the time taken by the HPC for each job
+#As the time can be in mm:ss or hh:mm:ss format slight changes are made to ensure
+#that they can all be correctly converted to time units
+time_taken_df <- list.files("/home/jonno/conflict_data/peelconflict", 
+                        pattern = "peelconflict.e4825498", full.names = T) %>%
+  map_df(~{
+  
+ print_data <- read_lines(.x)
+
+tibble( time = print_data[grep("Elapsed ", print_data)] %>% str_remove_all("\\\tElapsed \\(wall clock\\) time \\(h:mm:ss or m:ss\\): "), 
+       file_id = basename(.x) %>% str_remove(., "peelconflict.e4825498.") %>% as.numeric())
+
+})  %>%
+  mutate(time_length = str_count(time, pattern = ":"),
+         time2 = ifelse(time_length==1, paste0("00:", time), time),
+         time2 = hms(time2))
+
+#mean time is 30 mins. not too bad at all
+mean(time_taken_df$time2)
+
+flux=c(-2,-4,1,-2,4,11)
+sign(flux)
+diff(sign(flux))
+
+updn <- c(0, diff(sign(flux)))
+ix <- which(updn != 0)
 
 ```
 
@@ -620,7 +532,7 @@ randomly assign edge strengths
 ```
 
 
-##distribution edges
+##Distribution edges
 
 This shows the effect of using increaingly wide ranges of possible edge stiffnesses to predict the outcome of conflict.
 I expect that when the uncertainty becomes larger the reliability drops.
@@ -658,9 +570,9 @@ The traditional metrics are identical for both of the conlfict types and in fact
 
 #What is notable is that the medici can lose the conflict but are never less central  (lowwr betweeness) than the Strozzi or the Albizzi. This supports the simple case of a line of nodes where the centrality  of the nodes at each end is equal.
 
-source(file = file.path(SubcodeFolder, "medici_process.R"))
+medici_df <- medici_process(files[5], files[6])
 
-AlbizziandStrozzi %>%
+medici_df$AlbizziandStrozzi %>%
   filter(separate_success) %>%
   select(1:6, ratio) %>%
   pivot_longer(cols = 2:6, names_to = "metric", values_to = "values") %>%
@@ -678,7 +590,7 @@ ggsave(file.path(FiguresFolder,  "medici_factional_controll.pdf"))
 
 
 set.seed(345)
-g_medici %>%
+medici_df$g_medici %>%
   delete_vertices(., vertex_attr(., "name")=="PUCCI" ) %>%
   ggraph(.) + 
     geom_edge_link2( width = 0.7, edge_alpha =0.5) + 
@@ -693,7 +605,7 @@ ggsave(file.path(FiguresFolder,  "Medici_partisan_network.pdf"))
 
 
 
-betweenness(g_medici, normalized = T)
+betweenness(medici_df$g_medici, normalized = T)
 #the elevation and groups plot
 # medici_strozzi$groups %>%
 #   filter(marriage_weight == 300, business_weight == 100) %>%
@@ -728,6 +640,8 @@ Irrespective of the relation between uni and multi edges Benson could never over
 This information is not possible in a normal community detection algorithm which would always break the network into identical communities. The edge weights can be changed but this assumption has to be explicity stated using SETSe wheras the assumption is implicit in the other algorithms.
 
 ```{r}
+
+test <- create_kapferer(files)
 
 source(file = file.path(SubcodeFolder, "kapferer_process.R"))
 #SETSE separates the beliggerants everytime as expected, however the other methods can only achieve this on certain parameter settings. That said they do sucessfully show that the Abraham would have beet Donald. They are much less 
@@ -786,22 +700,55 @@ as_data_frame(kapferer_mine_g) %>%
 ##Thurman Office
 
 A whole host of crazy happened here this is to test what I can do with it
+
+The Thurman office conflict "In the office: Networks and coalitions"
+https://doi.org/10.1016/0378-8733(79)90010-8
+
+
+Ann beats Emma
+
+Conflict 1
+factions Ann vs Emma : Ann Wins
+
+For Ann
+Tina
+Jamie
+Drew
+Several Secretaries and Managers
+
+Conflict x not really a conflict?
+Emma vs Group
+
+Emma
+Rose
+Mike
+
+Against
+Lisa
+Katy
+Amy
+
+Conflict 3
+Pete vs Minna: Pete wins
+
 ```{r}
 file_id <- grepl("thuroff", files)
 
 emma_vs_ann <- thurman_office_function("ANN", "EMMA")
-pete_vs_minna <-  thurman_office_function("PETE", "MINNA")
 emma_vs_group <- thurman_office_function("EMMA", c("ANN", "AMY", "TINA", "KATY","LISA"))
+pete_vs_minna <-  thurman_office_function("PETE", "MINNA", remove_minna = FALSE)
 
 
 test <- emma_vs_group$groups
 
-bind_rows(emma_vs_group$summary %>% mutate(model = "emma vs group"),
+bind_rows(#emma_vs_group$summary %>% mutate(model = "emma vs group"),
           emma_vs_ann$summary %>% mutate(model = "ann vs emma"),
           pete_vs_minna$summary %>%mutate(model = "pete vs minna")
             
             ) %>%
-  mutate(name = str_remove(name, "clustering_" )%>% str_replace(., "_", " ")) %>%
+  mutate(name = str_remove(name, "clustering_" )%>% 
+           str_replace(., "_", " ") %>% 
+           str_replace(., "elev", "SETSe")) %>%
   ggplot(aes(x = ratio, y = fract, colour = name, group = name)) + geom_line() +
   facet_wrap(~model) +
   labs(title = "Predicted control using SETSe and traditional clustering methods", 
@@ -821,21 +768,27 @@ ggplot(aes(y = elevation, x = node)) + geom_point() +
 emma_vs_group$groups %>%
   filter(node=="PRESIDENT")
 
-g_out %>%
+pete_vs_minna$g_out %>%
+  delete.vertices(., "MINNA") %>%
 ggraph(.) + 
     geom_edge_link2( width = 0.7, edge_alpha =0.5) + 
       geom_node_point( aes(
                            size = ifelse(name == "PETE"| name =="MINNA", 6,3))) + 
     scale_size_continuous(range = c(3, 6))+
   scale_edge_colour_viridis() +
-  labs(title = "The factional allegiance of the Florentine families network") +
   guides( size = "none")+
 geom_node_text(aes(label = name), nudge_y = .08)
 
 ```
 
+##Zachery Karate club
 
-#Sampson data
+```{r}
+
+```
+
+
+##Sampson data
 ```{r}
 g_dl <- load_dl_graph(files[7], directed = FALSE)
 
@@ -850,29 +803,59 @@ names(g_dl)
 
 #highschool
 
-This is to see if using the highschool data I can generate more distinct results relateing to spring strength as the networks are actual social networks as opposed to random structures.
+This is to see if using the highschool data I can generate more distinct results relating to spring strength as the networks are actual social networks as opposed to random structures.
 
 ```{r}
 
-
 set.seed(123)
-g <- read_rds(file.path(PLwd, "highschool/graphs", "school_77.rds" ))  %>% simplify() %>% {
-  set_edge_attr(., "k", value = sample(c(100, 1000), ecount(.), replace = T)) }
+g <- read_rds(file.path(PLwd, "highschool/graphs", "school_7.rds" ))  %>% simplify() %>% {
+  set_edge_attr(., "k", value = 500) } %>%
+  remove_small_components()
 
 
-g_df <- as_data_frame(g, what = "vertices")
+ggraph(g) +
+      geom_edge_fan()+
+      geom_node_point(aes(colour = grade), size=3) 
+
+
+g_df <- as_data_frame(g, what = "edges")
 
 g <- g %>% 
 two_beligerent_conflict(., beligerents = c(19, 23)) %>%
   prepare_SETSe_continuous(. , node_names = "name", force_var = "force")
 
-results <- auto_SETSe(g)
+results <- SETSe_auto(g)
+results <- SETSe_bicomp(g, tol = 0.002, verbose = T)
 
 sum(results$node_embeddings$elevation>0)
 sum(results$node_embeddings$elevation<0)
 
+test <- as_data_frame(g)
+vcount(g)
 ```
 
 
-	
+	#Update packages
+
+```{r}
+library(devtools)
+library(roxygen2)
+```
+
+rsetse update
+```{r}
+roxygenise( "~/rSETSe")
+detach("package:rsetse", unload = TRUE)
+install("~/rSETSe")
+library(rsetse)
+```
+
+ConflcitInternal update
+```{r}
+roxygenise( "~/SETSe_conflict/ConflictInternal")
+detach("package:ConflictInternal", unload = TRUE)
+install("~/SETSe_conflict/ConflictInternal")
+library(ConflictInternal)
+```
+
 	

@@ -56,32 +56,32 @@ if(dir.exists("/home/jonno")){
 #get the total job set
 #only the row corresponding to the rask ID will be performed
 print("generate simulations")
-simulation_combinations <- expand.grid(LETTERS[1:5], c("k_uniform", "k_varies"), 1:50, stringsAsFactors = FALSE)
-
+simulation_combinations <-  expand_grid(graph_type = LETTERS[1:5], 
+                                        tibble(r =  seq(-1000,1000, 200 ),
+                                               k_near = ifelse(r<0, abs(r), 100),
+                                               k_mid = ifelse(r==0, 100, (abs(r)-100)/2 +100),
+                                               k_far = ifelse(r>0, abs(r), 100)) ,
+                                        seed = 1:100) %>%
+  mutate(k_type = paste0("n",k_near,"m", k_mid, "f", k_far)#paste0(ifelse(r<0, "neg", "pos"), abs(r))
+           )
 print("get simulation parameters")
 
-graph_type <- simulation_combinations[task_id,1]
+graph_type <- simulation_combinations$graph_type[task_id]
 
-k_type <- simulation_combinations[task_id , 2]
+k_type <- simulation_combinations$k_type[task_id ]
 
-seed <- simulation_combinations[task_id,3]
+seed <- simulation_combinations$seed[task_id]
 
-file_name <- paste0("peel_conflict_", k_type, "_graph_",graph_type, "_seed_",seed, ".rds" )
+file_name <- paste0("peel_conflict_", "k_", k_type, "_graph_",graph_type, "_seed_",seed, ".rds" )
 
-if(k_type =="k_uniform"){
-  
-  k_levels <- c(100,100,100)
-  
-} else {
-  
-  k_levels <- c(100, 550, 1000)
-}
+#get the k values for each edge type
+k_levels <- simulation_combinations[task_id, 3:5] %>% as.numeric()
 
 #THIS SHOULD BE SET TO 40!!!!!!
 print("begin embeddings")
 start_time <- Sys.time()
 
-combinations <- t(combn(1:3, 2))
+combinations <- t(combn(1:40, 2))
 
 #The functiom ensures that the network has only a single component
 peels_results <- peel_conflicts(graph_type = graph_type,

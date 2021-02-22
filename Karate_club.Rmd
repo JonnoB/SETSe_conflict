@@ -1,0 +1,261 @@
+---
+title: "karate"
+author: "Jonathan Bourne"
+date: "28/11/2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+This markdown is an experiment with the zachery karate club
+
+```{r}
+packages <- c("tidyverse", "igraph", "igraphdata", "minpack.lm", "ggraph")
+
+new.packages <- packages[!(packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+select <- dplyr::select
+arrange <- dplyr::arrange
+sapply(packages, library, character.only = TRUE)
+
+
+library(PowerGridNetworking)
+library(NetworkSpringEmbedding)
+library(ConflictInternal)
+
+Figures_path <- "/home/jonno/Dropbox/Apps/ShareLaTeX/Spring_system_introduction_CASA/Figures"
+```
+
+
+THe weights are all 1 or larger. I will say that the wieght is the tolerance. Thus the flow is always 1.
+
+The spring stiffness is
+
+```{r}
+data("karate", package="igraphdata")
+
+karate_edge_df <- as_data_frame(karate) %>%
+  mutate(weight = weight*100)
+
+karate_node_df <- as_data_frame(karate, what = "vertices") %>%
+  select(name, everything()) %>%
+  mutate(force = case_when(
+    name =="Mr Hi" ~1,
+    name == "John A" ~-1,
+    TRUE ~0
+  ))
+
+
+g <- graph_from_data_frame(karate_edge_df, directed = FALSE, vertices = karate_node_df) %>%
+  set.vertex.attribute(name = "name", value = get.vertex.attribute(., "label")) %>%
+  prepare_SETSe_binary(., node_names = "label", positive_value = "H", force_var = "label", k = 500) %>%
+  two_beligerent_conflict(., c(1,34))
+
+
+karate_SETS <- SETSe_bicomp(g, 
+                         force = "force", 
+              distance = "distance", 
+              edge_name = "edge_name",
+              k = "weight",
+              tstep = 0.02,
+              tol = 10e-4,
+              mass = 1,
+              verbose = TRUE)
+
+sum(abs(karate_SETS$node_embeddings$static_force))
+
+#function that finds what fraction of the full range the metric is
+kappa <- function(value){
+  
+  (value-min(value))/(max(value)-min(value))
+  
+}
+
+
+nodes <- karate_SETS$node_embeddings %>%
+  mutate(elevation =elevation)
+
+edges <- karate_SETS$edge_embeddings %>% 
+  mutate(tension = kappa(tension),
+         strain2 = kappa(strain))
+
+strain_graph <- as_data_frame(g) %>%
+  left_join(edges %>% select(edge_name, tension, strain)) %>%
+  graph_from_data_frame(., directed = FALSE, 
+                        vertices = karate_node_df %>%
+  left_join(nodes %>% select(label = node, elevation ))%>%
+    select(label, everything()) %>% mutate(name = label)
+                        ) %>%
+        set.vertex.attribute(., "betweenness", value = betweenness(.)) %>%
+  set.edge.attribute(., "inv_weight", value = 1/get.edge.attribute(., "weight"))
+
+tree_strain <- hclust_graph(strain_graph, weight = "strain", method = "single")
+tree_tension <- hclust_graph(strain_graph, weight = "tension", method = "single")
+tree_inv_weight <- hclust_graph(strain_graph, weight = "inv_weight", method = "single")
+
+plot(tree_tension)
+
+check_groups <- tibble(label = names(cutree(tree_strain, k = 2)), 
+                       strain_group = cutree(tree_strain, k = 2) , 
+                       tension_group = cutree(tree_tension, k = 2),
+                       inv_weight_group = cutree(tree_inv_weight, k = 2)) %>%
+  left_join(karate_node_df, .) %>%
+  mutate(color = case_when(
+    strain_group ==  Faction ~ strain_group,
+    TRUE ~ as.integer(3)
+  ))
+
+
+#check how elevation and faction checks out
+
+test <-nodes %>%
+  left_join(karate_node_df %>% select(node = label, Faction)) %>%
+  mutate(clustering_kmeans = kmeans(elevation, centers = 2)$cluster,
+         clustering_tree = cutree(tree_tension, k = 2)) %>%
+  left_join(., tibble(
+  node = vertex_attr(g, "name"),
+  clustering_fast_greedy = cluster_fast_greedy(
+    strain_graph,
+    weights = edge_attr(g, "weight"),
+    merges = T
+  ) %>% as.hclust %>%
+    cutree(., k = 2),
+  clustering_louvain = membership(cluster_louvain(strain_graph, weights = edge_attr(g, "weight")))
+))
+
+  
+#SETSe and fast greedy better with weights louvain no difference
+test %>% select(contains("clustering")) %>%
+          map_dbl(~{
+            
+            adjustedRandIndex(test$Faction, .x)
+            
+          }) %>% tibble(names = names(.), values = .)
+       
+       
+
+test %>%
+  ggplot(aes(x = node, y = elevation, colour = factor(Faction))) + geom_point()
+
+#SETSe get a 100% match
+test <- as_data_frame(strain_graph, what = "vertices")
+
+table(test$elevation>0,
+      test$Faction)
+
+
+strain_graph_test <- as_data_frame(g) %>%
+  left_join(edges %>% select(edge_name, tension, strain, strain2))
+
+```
+
+plot karate club
+```{r}
+
+cluster_fast_greedy(strain_graph, weights = edge_attr(g, "weight"), merges = T)%>% as.hclust %>%
+cutree(., k = 2)  
+
+set.seed(345)
+ggraph(strain_graph) + 
+    geom_edge_link2(aes(colour = strain<0.2), width = 0.7, edge_alpha =1) + 
+      geom_node_point( size = 3.6) +
+    geom_node_point(aes(colour = elevation, size = ifelse(name %in% c("Mr Hi", "John A"), 4, 3))) + 
+  scale_size_continuous(range = c(3, 6)) +
+  #scale_edge_colour_viridis() +
+   scale_color_viridis_c(option = "B") +
+  labs(title = "Node elevation and edge tension for the Zachery karate club") +
+  guides( size = "none")
+ggsave(file.path(Figures_path, "karate_embeddings.pdf"))
+
+set.seed(345)
+ggraph(strain_graph) + 
+    geom_edge_link2(aes(colour = tension), width = 0.7, edge_alpha =1) + 
+      geom_node_point( size = 3.6)+
+    geom_node_point(aes(colour = as.factor(elevation<=0), size = ifelse(name %in% c("Mr Hi", "John A"), 4, 3))) + 
+  scale_size_continuous(range = c(3, 6)) +
+  scale_edge_colour_viridis() +
+  labs(title = "Faction Allegiance and Edge tension for the Zachery karate club", colour = "Faction") +
+  guides( size = "none")
+  ggsave(file.path(Figures_path, "karate_Faction.pdf"))
+  
+  
+  ggraph(strain_graph) + 
+    geom_edge_link2(aes(colour = tension), width = 0.7, edge_alpha =1) + 
+    geom_node_point(aes(colour = as.factor(Faction)), size = 5)  +
+  geom_node_label(aes(label = name), repel = TRUE) +
+  guides( size = "none", colour = "none", tension = "none")
+```
+
+
+
+
+
+```{r}
+
+combinations <- get.edge.attribute(karate, "weight")[kappa(karate_SETS$edge_embeddings$tension)>0.1]
+
+prod(choose(8, combinations))
+
+combos <- expand_grid(range_k = 1:10,
+            reverse_order = c(FALSE, TRUE))
+
+test <- 1:nrow(combos) %>%
+  map_df(~{
+    
+    
+    g <- graph_from_data_frame(karate_edge_df, directed = FALSE, vertices = karate_node_df) %>%
+      set.vertex.attribute(name = "name", value = get.vertex.attribute(., "label")) %>%
+      prepare_SETSe_binary(., node_names = "label", positive_value = "H", force_var = "label", k = 500) %>%
+      edge_reweighter(., "weight", min_k = 100, mid_point = 550, 
+                      range_k = combos$range_k[.x], 
+                      reverse_order = combos$reverse_order[.x]) %>%
+      two_beligerent_conflict(., c(1,34))
+    
+    karate_SETSe <- SETSe_bicomp(g, 
+                                 force = "force", 
+                                 distance = "distance", 
+                                 edge_name = "edge_name",
+                                 k = "weight",
+                                 tstep = 0.02,
+                                 tol = 10e-6,
+                                 mass = 1,
+                                 verbose = FALSE)
+    
+    embedding_data <- karate_SETSe$node_embeddings %>%
+      mutate(clustering_SETSe = ifelse(elevation>0, 1,2)) %>%
+      left_join(karate_node_df %>% select(node = label, Faction)) %>%
+      left_join(., 
+                tibble(
+                  node = vertex_attr(g, "name"),
+                  clustering_fast_greedy = cluster_fast_greedy(
+                    g,
+                    weights = edge_attr(g, "weight"),
+                    merges = T
+                  ) %>% as.hclust %>%
+                    cutree(., k = 2),
+                  clustering_louvain = membership(cluster_louvain(g, weights = edge_attr(g, "weight")))
+                )
+      )
+    
+    
+    tibble(SETSe_rand = adjustedRandIndex(embedding_data$Faction, embedding_data$elevation>0), 
+           fast_greedy_rand = adjustedRandIndex(embedding_data$Faction, embedding_data$clustering_fast_greedy), 
+           louvain_rand = adjustedRandIndex(embedding_data$Faction, embedding_data$clustering_louvain), 
+           range_k = combos$range_k[.x], 
+           reverse_order = combos$reverse_order[.x])
+    
+    
+    
+  })
+
+
+test %>%
+  mutate(
+    total_value = ifelse(reverse_order, 1/range_k, range_k),
+    axis_labels = ifelse(reverse_order, paste0(1, "/", range_k), paste0(range_k, "/", 1))) %>%
+  pivot_longer(., cols = c(1:3)) %>%
+  ggplot(aes(x = range_k, y = value, colour = name))+ geom_line()
+
+```
+
